@@ -33,6 +33,7 @@ export function App() {
   const [lastEchoRoundtripMs, setLastEchoRoundtripMs] = useState<number | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [streamVersion, setStreamVersion] = useState(0);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
 
   const sentAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -240,7 +241,7 @@ export function App() {
   );
 
   return (
-    <main className="relative h-full w-full overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+    <main className="relative h-[100dvh] w-full overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <TopBar
         map={map}
         state={state}
@@ -258,6 +259,8 @@ export function App() {
         state={state}
         draftPin={draftPin}
         darkMode={darkMode}
+        sheetExpanded={sheetExpanded}
+        hasToast={Boolean(toast)}
         onPlacePin={handlePlacePin}
         onCenterOnUser={handlePinpointMe}
       />
@@ -268,7 +271,9 @@ export function App() {
         draftPin={draftPin}
         pinLabel={pinLabel}
         sending={sending}
+        expanded={sheetExpanded}
         lastEchoRoundtripMs={lastEchoRoundtripMs}
+        onExpandedChange={setSheetExpanded}
         onPinLabelChange={setPinLabel}
         onDraftYawChange={(yaw) => setDraftPin((p) => (p ? { ...p, yaw } : null))}
         onPinpointMe={handlePinpointMe}

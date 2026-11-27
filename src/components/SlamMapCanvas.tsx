@@ -8,6 +8,8 @@ interface SlamMapCanvasProps {
   state: KennyState | null;
   draftPin: Pose2D | null;
   darkMode: boolean;
+  sheetExpanded?: boolean;
+  hasToast?: boolean;
   onPlacePin: (pose: Pose2D) => void;
   onCenterOnUser: () => void;
 }
@@ -17,15 +19,31 @@ export function SlamMapCanvas({
   state,
   draftPin,
   darkMode,
+  sheetExpanded = false,
+  hasToast = false,
   onPlacePin,
   onCenterOnUser,
 }: SlamMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
+  const [isInteracting, setIsInteracting] = useState(false);
   const [pulseKey, setPulseKey] = useState(0);
+
+  // Multi-touch pointer tracking for native pinch-to-zoom + 1-finger pan
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    panX: number;
+    panY: number;
+    moved: boolean;
+    multiTouch: boolean;
+    pinchStartDist: number;
+    pinchStartZoom: number;
+    pinchMidX: number;
+    pinchMidY: number;
+  } | null>(null);
 
   // Trigger a fresh sonar animation whenever the draft pinpoint moves
   useEffect(() => {
@@ -50,35 +68,88 @@ export function SlamMapCanvas({
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    setIsDragging(true);
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panX: pan.x,
-      panY: pan.y,
-      moved: false,
-    };
-  };
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setIsInteracting(true);
 
-  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!dragStartRef.current) return;
-    const dx = e.clientX - dragStartRef.current.x;
-    const dy = e.clientY - dragStartRef.current.y;
-    if (Math.hypot(dx, dy) > 6) {
-      dragStartRef.current.moved = true;
-      setPan({
-        x: dragStartRef.current.panX + dx,
-        y: dragStartRef.current.panY + dy,
-      });
+    const pts = Array.from(pointersRef.current.values());
+    if (pts.length === 1) {
+      gestureRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        panX: pan.x,
+        panY: pan.y,
+        moved: false,
+        multiTouch: false,
+        pinchStartDist: 0,
+        pinchStartZoom: zoom,
+        pinchMidX: 0,
+        pinchMidY: 0,
+      };
+    } else if (pts.length === 2) {
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const midX = (pts[0].x + pts[1].x) / 2;
+      const midY = (pts[0].y + pts[1].y) / 2;
+      gestureRef.current = {
+        startX: midX,
+        startY: midY,
+        panX: pan.x,
+        panY: pan.y,
+        moved: true,
+        multiTouch: true,
+        pinchStartDist: Math.max(10, dist),
+        pinchStartZoom: zoom,
+        pinchMidX: midX,
+        pinchMidY: midY,
+      };
     }
   };
 
-  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
-    const start = dragStartRef.current;
-    dragStartRef.current = null;
-    setIsDragging(false);
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!pointersRef.current.has(e.pointerId) || !gestureRef.current) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    if (!start || start.moved || !map) return;
+    const pts = Array.from(pointersRef.current.values());
+    const g = gestureRef.current;
+
+    if (pts.length >= 2) {
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const midX = (pts[0].x + pts[1].x) / 2;
+      const midY = (pts[0].y + pts[1].y) / 2;
+      const ratio = dist / Math.max(10, g.pinchStartDist);
+      const nextZoom = Number(Math.max(0.75, Math.min(3.0, g.pinchStartZoom * ratio)).toFixed(2));
+      g.moved = true;
+      g.multiTouch = true;
+      setZoom(nextZoom);
+      setPan({
+        x: g.panX + (midX - g.pinchMidX),
+        y: g.panY + (midY - g.pinchMidY),
+      });
+      return;
+    }
+
+    if (pts.length === 1 && !g.multiTouch) {
+      const dx = e.clientX - g.startX;
+      const dy = e.clientY - g.startY;
+      if (Math.hypot(dx, dy) > 8) {
+        g.moved = true;
+        setPan({
+          x: g.panX + dx,
+          y: g.panY + dy,
+        });
+      }
+    }
+  };
+
+  const handlePointerUpOrCancel = (e: React.PointerEvent<SVGSVGElement>) => {
+    pointersRef.current.delete(e.pointerId);
+    const g = gestureRef.current;
+
+    if (pointersRef.current.size === 0) {
+      gestureRef.current = null;
+      setIsInteracting(false);
+    }
+
+    if (e.type === 'pointercancel' || !g || g.moved || g.multiTouch || !map) return;
 
     // Convert tap position into map meters using SVG's screen CTM
     const svg = e.currentTarget;
@@ -92,8 +163,12 @@ export function SlamMapCanvas({
     const xMeters = Number((svgPt.x / SCALE).toFixed(2));
     const yMeters = Number((svgPt.y / SCALE).toFixed(2));
 
-    if (xMeters >= 0.35 && xMeters <= widthMeters - 0.35 && yMeters >= 0.35 && yMeters <= heightMeters - 0.35) {
-      // Auto-aim yaw from Kenny's current pose toward the pinpoint
+    if (
+      xMeters >= 0.35 &&
+      xMeters <= widthMeters - 0.35 &&
+      yMeters >= 0.35 &&
+      yMeters <= heightMeters - 0.35
+    ) {
       const robot = state?.pose ?? { x: widthMeters / 2, y: heightMeters / 2 };
       const yaw = Number(Math.atan2(yMeters - robot.y, xMeters - robot.x).toFixed(2));
       onPlacePin({ x: xMeters, y: yMeters, yaw });
@@ -102,7 +177,7 @@ export function SlamMapCanvas({
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     const delta = e.deltaY < 0 ? 0.14 : -0.14;
-    setZoom((z) => Number(Math.max(0.75, Math.min(2.6, z + delta)).toFixed(2)));
+    setZoom((z) => Number(Math.max(0.75, Math.min(3.0, z + delta)).toFixed(2)));
   };
 
   const pathD =
@@ -147,7 +222,7 @@ export function SlamMapCanvas({
     <div
       ref={containerRef}
       onWheel={handleWheel}
-      className="relative h-full w-full overflow-hidden bg-[var(--bg-map)] select-none"
+      className="relative h-full w-full touch-none overflow-hidden bg-[var(--bg-map)] select-none"
     >
       {/* Subtle radial emerald atmosphere */}
       <div
@@ -155,28 +230,29 @@ export function SlamMapCanvas({
         className="pointer-events-none absolute inset-0"
         style={{
           background: darkMode
-            ? 'radial-gradient(circle at 50% 38%, rgba(16, 185, 129, 0.12), transparent 62%)'
-            : 'radial-gradient(circle at 50% 38%, rgba(5, 150, 105, 0.09), transparent 62%)',
+            ? 'radial-gradient(circle at 50% 36%, rgba(16, 185, 129, 0.12), transparent 62%)'
+            : 'radial-gradient(circle at 50% 36%, rgba(5, 150, 105, 0.09), transparent 62%)',
         }}
       />
 
-      {/* Interactive SLAM Map Viewport */}
+      {/* Interactive SLAM Map Viewport (centered above mobile bottom sheet) */}
       <div
-        className="flex h-full w-full items-center justify-center pb-56 pt-16 sm:pb-52 sm:pt-20"
+        className="flex h-full w-full items-center justify-center px-2 pb-56 pt-16 sm:px-6 sm:pb-52 sm:pt-20"
         style={{
           transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
-          transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)',
+          transition: isInteracting ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       >
         <svg
           viewBox={`-30 -30 ${vbWidth + 60} ${vbHeight + 60}`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
+          onPointerUp={handlePointerUpOrCancel}
+          onPointerCancel={handlePointerUpOrCancel}
           role="application"
-          aria-label="Kenny saved SLAM map. Tap anywhere to drop a pinpoint goal."
-          className={`h-full max-h-[68vh] w-full max-w-[96vw] touch-none sm:max-w-[920px] ${
-            isDragging ? 'cursor-grabbing' : 'cursor-crosshair'
+          aria-label="Kenny saved SLAM map. Tap anywhere to drop a pinpoint goal, drag to pan, or pinch to zoom."
+          className={`h-full max-h-[70dvh] w-full touch-none sm:max-w-[920px] ${
+            isInteracting ? 'cursor-grabbing' : 'cursor-crosshair'
           }`}
         >
           <defs>
@@ -476,14 +552,20 @@ export function SlamMapCanvas({
         </svg>
       </div>
 
-      {/* Floating Map Controls (Right edge, thumb-accessible) */}
-      <div className="pointer-events-auto fixed right-3 top-24 z-20 flex flex-col gap-2 sm:right-5">
+      {/* Floating Map Controls (Thumb-zone positioned on mobile, top-right on desktop) */}
+      <div
+        className={`pointer-events-auto fixed right-3 z-20 flex flex-col gap-2 transition-opacity duration-200 sm:bottom-auto sm:right-5 sm:top-24 ${
+          sheetExpanded
+            ? 'pointer-events-none opacity-0 sm:pointer-events-auto sm:opacity-100'
+            : 'bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+15.5rem)] opacity-100'
+        }`}
+      >
         <button
           type="button"
           onClick={onCenterOnUser}
           aria-label="Pinpoint my current location"
           title="Pinpoint my location"
-          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 text-emerald-600 shadow-[var(--shadow-tinted)] backdrop-blur-md transition-colors hover:border-emerald-500 active:scale-95 dark:text-emerald-400"
+          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 text-emerald-600 shadow-[var(--shadow-tinted)] backdrop-blur-md transition-colors hover:border-emerald-500 active:opacity-80 dark:text-emerald-400"
         >
           <LocateFixed className="h-5 w-5" aria-hidden="true" />
         </button>
@@ -491,9 +573,9 @@ export function SlamMapCanvas({
         <div className="flex flex-col overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 shadow-[var(--shadow-tinted)] backdrop-blur-md">
           <button
             type="button"
-            onClick={() => setZoom((z) => Math.min(2.6, Number((z + 0.25).toFixed(2))))}
+            onClick={() => setZoom((z) => Math.min(3.0, Number((z + 0.25).toFixed(2))))}
             aria-label="Zoom in map"
-            className="flex h-11 w-11 cursor-pointer items-center justify-center text-[var(--text-primary)] transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 active:scale-95 dark:hover:text-emerald-400"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center text-[var(--text-primary)] transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 active:opacity-80 dark:hover:text-emerald-400"
           >
             <Plus className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -502,7 +584,7 @@ export function SlamMapCanvas({
             type="button"
             onClick={() => setZoom((z) => Math.max(0.75, Number((z - 0.25).toFixed(2))))}
             aria-label="Zoom out map"
-            className="flex h-11 w-11 cursor-pointer items-center justify-center text-[var(--text-primary)] transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 active:scale-95 dark:hover:text-emerald-400"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center text-[var(--text-primary)] transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 active:opacity-80 dark:hover:text-emerald-400"
           >
             <Minus className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -511,23 +593,23 @@ export function SlamMapCanvas({
             type="button"
             onClick={handleResetView}
             aria-label="Reset map zoom and pan"
-            className="flex h-11 w-11 cursor-pointer items-center justify-center text-[var(--text-secondary)] transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 active:scale-95 dark:hover:text-emerald-400"
+            className="flex h-11 w-11 cursor-pointer items-center justify-center text-[var(--text-secondary)] transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 active:opacity-80 dark:hover:text-emerald-400"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      {/* Tap Hint Pill */}
-      {!draftPin && state?.status !== 'navigating' && (
+      {/* Tap Hint Pill (hidden when a toast is showing or sheet is expanded) */}
+      {!draftPin && state?.status !== 'navigating' && !hasToast && !sheetExpanded && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="pointer-events-none fixed left-1/2 top-20 z-20 -translate-x-1/2 sm:top-22"
+          className="pointer-events-none fixed inset-x-0 top-[calc(max(0.75rem,env(safe-area-inset-top))+4.25rem)] z-20 flex justify-center px-3"
         >
           <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-[var(--bg-surface)]/92 px-3.5 py-1.5 text-xs font-medium text-[var(--text-primary)] shadow-[var(--shadow-tinted)] backdrop-blur-md">
-            <Crosshair className="h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
-            <span>Tap anywhere on Kenny&apos;s map to land a pinpoint</span>
+            <Crosshair className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden="true" />
+            <span>Tap map to drop pinpoint · Pinch to zoom</span>
           </div>
         </motion.div>
       )}
