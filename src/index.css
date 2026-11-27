@@ -1,242 +1,349 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+  /* Kinetic Habitat Color System */
+  --color-surface: #f8f9ff;
+  --color-surface-dim: #cbdbf5;
+  --color-surface-bright: #f8f9ff;
+  --color-surface-variant: #d3e4fe;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #eff4ff;
+  --color-surface-container: #e5eeff;
+  --color-surface-container-high: #dce9ff;
+  --color-surface-container-highest: #d3e4fe;
+  --color-on-surface: #0b1c30;
+  --color-on-surface-variant: #3c4a42;
+  --color-inverse-surface: #213145;
+  --color-inverse-on-surface: #eaf1ff;
+  --color-outline: #6c7a71;
+  --color-outline-variant: #bbcabf;
+  --color-surface-tint: #006c49;
+  --color-background: #f8f9ff;
+  --color-on-background: #0b1c30;
 
-:root {
-  --bg-canvas: #e6f4ee;
-  --bg-surface: rgba(255, 255, 255, 0.62);
-  --bg-surface-elevated: rgba(255, 255, 255, 0.46);
-  --bg-map: #e4f3ec;
-  --border-subtle: rgba(255, 255, 255, 0.72);
-  --border-strong: rgba(5, 150, 105, 0.34);
-  --text-primary: #062117;
-  --text-secondary: #265141;
-  --text-muted: #456f5f;
-  --accent-primary: #059669;
-  --accent-primary-hover: #047857;
-  --accent-soft: rgba(5, 150, 105, 0.14);
-  --shadow-tinted: 0 18px 42px -12px rgba(6, 78, 59, 0.18), 0 4px 12px -2px rgba(6, 78, 59, 0.08);
+  --color-primary: #006c49;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #10b981;
+  --color-on-primary-container: #00422b;
+  --color-inverse-primary: #4edea3;
+  --color-primary-fixed: #6ffbbe;
+  --color-primary-fixed-dim: #4edea3;
+  --color-on-primary-fixed: #002113;
+  --color-on-primary-fixed-variant: #005236;
 
-  /* Liquid Glass Optical Tokens (Light) */
-  --glass-bg: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.76) 0%,
-    rgba(244, 252, 248, 0.58) 52%,
-    rgba(220, 247, 236, 0.54) 100%
-  );
-  --glass-bg-subtle: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.62) 0%,
-    rgba(236, 250, 244, 0.42) 100%
-  );
-  --glass-border: rgba(255, 255, 255, 0.82);
-  --glass-border-subtle: rgba(16, 185, 129, 0.18);
-  --glass-highlight: inset 0 1.5px 0 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 0 0 rgba(6, 78, 59, 0.06);
-  --glass-shadow: 0 20px 48px -12px rgba(6, 78, 59, 0.16),
-    0 2px 10px -2px rgba(6, 78, 59, 0.07);
+  --color-secondary: #855300;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #fea619;
+  --color-on-secondary-container: #684000;
+  --color-secondary-fixed: #ffddb8;
+  --color-secondary-fixed-dim: #ffb95f;
+  --color-on-secondary-fixed: #2a1700;
+  --color-on-secondary-fixed-variant: #653e00;
+
+  --color-tertiary: #b91a24;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #ff7a73;
+  --color-on-tertiary-container: #79000e;
+  --color-tertiary-fixed: #ffdad7;
+  --color-tertiary-fixed-dim: #ffb3ad;
+  --color-on-tertiary-fixed: #410004;
+  --color-on-tertiary-fixed-variant: #930013;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* Spacing tokens */
+  --spacing-margin: 1.25rem;
+  --spacing-gutter: 1rem;
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-lg: 1.5rem;
+  --spacing-space-xl: 2rem;
+
+  /* Typography */
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-.dark {
-  --bg-canvas: #040d0a;
-  --bg-surface: rgba(12, 29, 23, 0.56);
-  --bg-surface-elevated: rgba(18, 42, 34, 0.44);
-  --bg-map: #050f0c;
-  --border-subtle: rgba(167, 243, 208, 0.16);
-  --border-strong: rgba(52, 211, 153, 0.36);
-  --text-primary: #f0fdf8;
-  --text-secondary: #a7d5c2;
-  --text-muted: #7ab09b;
-  --accent-primary: #10b981;
-  --accent-primary-hover: #34d399;
-  --accent-soft: rgba(16, 185, 129, 0.18);
-  --shadow-tinted: 0 22px 54px -12px rgba(0, 0, 0, 0.68), 0 0 28px -8px rgba(16, 185, 129, 0.18);
+@layer base {
+  html,
+  body {
+    width: 100%;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f9ff;
+    color: #0b1c30;
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
 
-  /* Liquid Glass Optical Tokens (Dark) */
-  --glass-bg: linear-gradient(
-    145deg,
-    rgba(24, 56, 45, 0.62) 0%,
-    rgba(10, 26, 20, 0.56) 48%,
-    rgba(13, 38, 30, 0.64) 100%
-  );
-  --glass-bg-subtle: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.08) 0%,
-    rgba(16, 185, 129, 0.05) 100%
-  );
-  --glass-border: rgba(167, 243, 208, 0.22);
-  --glass-border-subtle: rgba(167, 243, 208, 0.13);
-  --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 0 rgba(0, 0, 0, 0.35);
-  --glass-shadow: 0 24px 56px -12px rgba(0, 0, 0, 0.68),
-    0 0 32px -10px rgba(16, 185, 129, 0.22);
+  #root {
+    min-height: 100dvh;
+    width: 100%;
+  }
 }
 
-html,
-body,
-#root {
-  height: 100%;
-  height: 100dvh;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-  background-color: var(--bg-canvas);
-  color: var(--text-primary);
-  font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+::-webkit-scrollbar {
+  display: none;
 }
 
-.font-mono-num {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Safe-area spacing helpers for mobile notches & home indicators */
+/* Safe-area helpers */
 .pt-safe {
-  padding-top: max(0.75rem, env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top, 0px);
 }
 .pb-safe {
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Material Symbols helper */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  user-select: none;
+}
+.material-symbols-filled {
+  font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24;
+  user-select: none;
 }
 
 /* ============================================================================
-   Liquid Glass Surfaces (frosted refraction + specular rim + tinted depth)
+   Landing Ambient Floating Orbs
    ============================================================================ */
-.liquid-glass {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-highlight), var(--glass-shadow);
-  -webkit-backdrop-filter: blur(26px) saturate(190%);
-  backdrop-filter: blur(26px) saturate(190%);
+@keyframes floatOrb1 {
+  0%,
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(30px, -40px) scale(1.12);
+  }
 }
-
-.liquid-glass-subtle {
-  background: var(--glass-bg-subtle);
-  border: 1px solid var(--glass-border-subtle);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  backdrop-filter: blur(14px) saturate(150%);
+@keyframes floatOrb2 {
+  0%,
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(-35px, 25px) scale(1.08);
+  }
 }
-
-.liquid-glass-btn {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-highlight), 0 10px 26px -8px rgba(0, 0, 0, 0.28);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
-  transition: border-color 160ms ease, background-color 160ms ease, opacity 140ms ease;
+@keyframes floatOrb3 {
+  0%,
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(25px, 35px) scale(0.95);
+  }
 }
-
-.liquid-glass-btn:hover {
-  border-color: var(--border-strong);
+.animate-orb-1 {
+  animation: floatOrb1 14s ease-in-out infinite;
 }
-
-.liquid-cta {
-  background: linear-gradient(135deg, #10b981 0%, #059669 52%, #0d9488 100%);
-  box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.42),
-    inset 0 -2px 4px rgba(4, 120, 87, 0.45),
-    0 12px 28px -6px rgba(16, 185, 129, 0.5);
+.animate-orb-2 {
+  animation: floatOrb2 18s ease-in-out infinite;
 }
-
-.dark .liquid-cta {
-  background: linear-gradient(135deg, #34d399 0%, #10b981 55%, #14b8a6 100%);
-  box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.65),
-    inset 0 -2px 4px rgba(5, 150, 105, 0.45),
-    0 12px 32px -6px rgba(16, 185, 129, 0.48);
+.animate-orb-3 {
+  animation: floatOrb3 16s ease-in-out infinite;
 }
 
 /* ============================================================================
-   Live Ambient Aurora Background Keyframes (GPU-composited)
+   3D Perspective Tilt Cards & Liquid Glass Surfaces
    ============================================================================ */
-@keyframes aurora-drift-1 {
-  0%,
-  100% {
-    transform: translate3d(-8%, -6%, 0) scale(1);
-  }
-  33% {
-    transform: translate3d(14%, 10%, 0) scale(1.14);
-  }
-  66% {
-    transform: translate3d(-4%, 16%, 0) scale(0.94);
-  }
+.tilt-perspective {
+  perspective: 1000px;
 }
-
-@keyframes aurora-drift-2 {
-  0%,
-  100% {
-    transform: translate3d(10%, 8%, 0) scale(1.05);
-  }
-  38% {
-    transform: translate3d(-12%, -8%, 0) scale(0.92);
-  }
-  72% {
-    transform: translate3d(6%, -14%, 0) scale(1.16);
-  }
+.tilt-card-wrapper {
+  perspective: 1000px;
+  transform-style: preserve-3d;
 }
-
-@keyframes aurora-drift-3 {
-  0%,
-  100% {
-    transform: translate3d(0%, 10%, 0) scale(0.95);
-  }
-  50% {
-    transform: translate3d(-10%, -12%, 0) scale(1.18);
-  }
-}
-
-@keyframes ambient-pulse {
-  0%,
-  100% {
-    opacity: 0.42;
-    transform: scale(0.92);
-  }
-  50% {
-    opacity: 0.72;
-    transform: scale(1.06);
-  }
-}
-
-.animate-aurora-1 {
-  animation: aurora-drift-1 19s ease-in-out infinite;
+.tilt-card {
+  transform-style: preserve-3d;
   will-change: transform;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
-.animate-aurora-2 {
-  animation: aurora-drift-2 23s ease-in-out infinite;
-  will-change: transform;
+.tilt-card.tilt-active {
+  transition: transform 0.08s ease-out, box-shadow 0.2s ease-out;
 }
-.animate-aurora-3 {
-  animation: aurora-drift-3 27s ease-in-out infinite;
-  will-change: transform;
-}
-.animate-ambient-pulse {
-  animation: ambient-pulse 8s ease-in-out infinite;
-  will-change: transform, opacity;
+.tilt-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  mix-blend-mode: overlay;
+  z-index: 20;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, 0.7) 0%,
+    rgba(255, 255, 255, 0.1) 45%,
+    rgba(255, 255, 255, 0) 70%
+  );
 }
 
-/* Subtle custom scrollbars for sheet content */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+.liquid-glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.78) 0%,
+    rgba(255, 255, 255, 0.52) 100%
+  );
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 12px 32px -6px rgba(16, 185, 129, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.03),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.95);
+  position: relative;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+.liquid-glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.9) 40%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
+  pointer-events: none;
+  z-index: 10;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
+
+.liquid-pill-track {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.03),
+    0 4px 14px rgba(16, 185, 129, 0.06);
+}
+
+.liquid-pill-thumb {
+  background: linear-gradient(135deg, #10b981 0%, #006c49 100%);
+  box-shadow: 0 4px 12px rgba(0, 108, 73, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+/* Micro Switch */
+.liquid-switch {
+  width: 38px;
+  height: 22px;
+  background: rgba(187, 202, 191, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: 9999px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 25;
+}
+.liquid-switch.active {
+  background: #10b981;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+.liquid-switch-dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.liquid-switch.active .liquid-switch-dot {
+  transform: translateX(16px);
+}
+
+/* ============================================================================
+   Home SLAM Map LiDAR Animations
+   ============================================================================ */
+@keyframes lidarRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes lidarWave {
+  0% {
+    r: 18;
+    opacity: 0.75;
+    stroke-width: 2;
+  }
+  100% {
+    r: 135;
+    opacity: 0;
+    stroke-width: 0.5;
+  }
+}
+@keyframes laserHits {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.animate-lidar-rotate {
+  animation: lidarRotate 5.5s linear infinite;
+}
+.animate-lidar-wave {
+  animation: lidarWave 3.2s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+.animate-lidar-wave-delayed {
+  animation: lidarWave 3.2s cubic-bezier(0.2, 0.6, 0.4, 1) 1.6s infinite;
+}
+.animate-laser-hits {
+  animation: laserHits 2.6s ease-in-out infinite;
+}
+.animate-spin-slow {
+  animation: lidarRotate 7s linear infinite;
+}
+
+/* Kinetic Habitat Elevation Shadows */
+.shadow-kh-card {
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05),
+    0 2px 6px -1px rgba(15, 23, 42, 0.02);
+}
+.shadow-kh-dock {
+  box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08),
+    0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+.shadow-kh-cta {
+  box-shadow: 0 8px 24px -4px rgba(16, 185, 129, 0.38);
+}
+.shadow-kh-emergency {
+  box-shadow: 0 8px 24px -4px rgba(239, 68, 68, 0.35);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  .tilt-card {
+    transform: none !important;
+    transition: none !important;
+  }
+  .tilt-glare {
+    display: none !important;
+  }
+  .animate-orb-1,
+  .animate-orb-2,
+  .animate-orb-3,
+  .animate-lidar-rotate,
+  .animate-lidar-wave,
+  .animate-lidar-wave-delayed,
+  .animate-spin-slow {
+    animation: none !important;
   }
 }

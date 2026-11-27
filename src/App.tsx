@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { TopBar } from './components/TopBar';
-import { SlamMapCanvas } from './components/SlamMapCanvas';
-import { BottomControlSheet } from './components/BottomControlSheet';
-import { GoalToast, type ToastNotice } from './components/GoalToast';
+import { AppHeader } from './components/AppHeader';
+import { BottomNav, type AppTab } from './components/BottomNav';
+import { LandingScreen } from './components/LandingScreen';
+import { HomeScreen } from './components/HomeScreen';
+import { SettingsScreen } from './components/SettingsScreen';
+import { AboutScreen } from './components/AboutScreen';
 import {
   cancelGoal,
-  createWaypoint,
-  deleteWaypoint,
   fetchMap,
   fetchState,
   sendGoal,
@@ -18,13 +18,10 @@ import { loadCachedMap, loadCachedState, saveCachedState } from './lib/offlineSt
 import type { KennyState, Pose2D, SavedMap, Waypoint } from './types';
 
 export function App() {
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('kenny_theme');
-    if (saved) return saved === 'dark';
-    return true;
-  });
+  const [showLanding, setShowLanding] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<AppTab>('home');
 
-  // Immediately hydrate from local cache so the APK works 100% offline on cold launch
+  // Hydrate immediately from local cache so the app works 100% offline on cold launch
   const [map, setMap] = useState<SavedMap | null>(() => loadCachedMap());
   const [state, setState] = useState<KennyState | null>(() => loadCachedState());
   const [networkOnline, setNetworkOnline] = useState<boolean>(() =>
@@ -34,21 +31,22 @@ export function App() {
   const [syncing, setSyncing] = useState(false);
   const [sending, setSending] = useState(false);
   const [draftPin, setDraftPin] = useState<Pose2D | null>(null);
-  const [pinLabel, setPinLabel] = useState('My Location');
-  const [lastEchoRoundtripMs, setLastEchoRoundtripMs] = useState<number | null>(null);
-  const [toast, setToast] = useState<ToastNotice | null>(null);
+  const [pinLabel, setPinLabel] = useState('Pinpoint Goal');
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [streamVersion, setStreamVersion] = useState(0);
-  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [tripsCount, setTripsCount] = useState<number>(142);
+  const [totalDistanceKm, setTotalDistanceKm] = useState<number>(4.8);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const sentAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
   const connected = networkOnline && apiConnected;
 
-  const showToast = useCallback((notice: Omit<ToastNotice, 'id'>) => {
+  const showToast = useCallback((msg: string) => {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    setToast({ ...notice, id: `${Date.now()}` });
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 3600);
+    setToastMsg(msg);
+    toastTimerRef.current = window.setTimeout(() => setToastMsg(null), 2600);
   }, []);
 
   // Track device network online/offline transitions
@@ -60,11 +58,7 @@ export function App() {
     const onOffline = () => {
       setNetworkOnline(false);
       setApiConnected(false);
-      showToast({
-        title: 'Offline mode active',
-        subtitle: 'Running on cached SLAM map locally',
-        variant: 'info',
-      });
+      showToast('Offline mode active — using cached SLAM map');
     };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -73,22 +67,6 @@ export function App() {
       window.removeEventListener('offline', onOffline);
     };
   }, [showToast]);
-
-  // Apply Dark / Light mode class to <html>
-  useEffect(() => {
-    const root = document.documentElement;
-    if (darkMode) {
-      root.classList.add('dark');
-      localStorage.setItem('kenny_theme', 'dark');
-    } else {
-      root.classList.remove('dark');
-      localStorage.setItem('kenny_theme', 'light');
-    }
-    const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) {
-      metaTheme.setAttribute('content', darkMode ? '#040D0A' : '#E6F4EE');
-    }
-  }, [darkMode]);
 
   // Initial load + Live SSE subscription (gracefully falls back to offline cache)
   const loadInitial = useCallback(async () => {
@@ -118,32 +96,24 @@ export function App() {
       },
       onMap: (m) => {
         setMap(m);
-        showToast({
-          title: 'Kenny saved map synced',
-          subtitle: `${m.name} (${m.widthMeters}m × ${m.heightMeters}m)`,
-          variant: 'info',
-        });
+        showToast(`Synced map: ${m.name}`);
       },
       onGoalSynced: ({ goal, state: s }) => {
         setState(s);
         setApiConnected(true);
         if (sentAtRef.current) {
-          setLastEchoRoundtripMs(Math.max(1, Math.round(performance.now() - sentAtRef.current)));
+          setLatencyMs(Math.max(1, Math.round(performance.now() - sentAtRef.current)));
           sentAtRef.current = null;
         }
-        showToast({
-          title: 'Goal synced back to device',
-          subtitle: `Kenny locked "${goal.label}" (${goal.x.toFixed(2)}m, ${goal.y.toFixed(2)}m)`,
-          variant: 'synced',
-        });
+        showToast(`Kenny locked "${goal.label}"`);
       },
       onGoalReached: (s) => {
         setState(s);
-        showToast({
-          title: 'Kenny arrived at goal',
-          subtitle: `Reached ${s.activeGoal?.label ?? 'target'} safely`,
-          variant: 'reached',
-        });
+        setTripsCount((t) => t + 1);
+        if (s.activeGoal?.distanceMeters) {
+          setTotalDistanceKm((d) => Number((d + s.activeGoal!.distanceMeters! / 1000).toFixed(2)));
+        }
+        showToast(`Kenny arrived at ${s.activeGoal?.label ?? 'target'}`);
       },
       onError: () => {
         setApiConnected(false);
@@ -166,7 +136,7 @@ export function App() {
         const dx = target.x - prev.pose.x;
         const dy = target.y - prev.pose.y;
         const dist = Math.hypot(dx, dy);
-        const step = 0.22;
+        const step = 0.24;
 
         if (dist <= step) {
           const done: KennyState = {
@@ -179,11 +149,11 @@ export function App() {
             lastUpdatedAt: new Date().toISOString(),
           };
           saveCachedState(done);
-          showToast({
-            title: 'Offline simulation arrived',
-            subtitle: `Previewed arrival at ${target.label}`,
-            variant: 'reached',
-          });
+          setTripsCount((t) => t + 1);
+          if (target.distanceMeters) {
+            setTotalDistanceKm((d) => Number((d + target.distanceMeters! / 1000).toFixed(2)));
+          }
+          showToast(`Arrived at ${target.label}`);
           return done;
         }
 
@@ -193,104 +163,91 @@ export function App() {
           y: Number((prev.pose.y + (dy / dist) * step).toFixed(2)),
           yaw: Number(Math.atan2(dy, dx).toFixed(3)),
         };
-        const remaining = Number(Math.hypot(target.x - nextPose.x, target.y - nextPose.y).toFixed(2));
+        const remaining = Number(
+          Math.hypot(target.x - nextPose.x, target.y - nextPose.y).toFixed(2)
+        );
         const next: KennyState = {
           ...prev,
           pose: nextPose,
           remainingMeters: remaining,
-          progress: total > 0 ? Number(Math.max(0, Math.min(0.99, 1 - remaining / total)).toFixed(3)) : 0,
+          progress:
+            total > 0 ? Number(Math.max(0, Math.min(0.99, 1 - remaining / total)).toFixed(3)) : 0,
           lastUpdatedAt: new Date().toISOString(),
         };
         saveCachedState(next);
         return next;
       });
-    }, 120);
+    }, 110);
 
     return () => window.clearInterval(timer);
   }, [connected, state?.status, state?.activeGoal?.id, showToast]);
+
+  const dispatchGoal = useCallback(
+    async (pose: Pose2D, label: string) => {
+      setSending(true);
+      sentAtRef.current = performance.now();
+      try {
+        const result = await sendGoal({
+          x: pose.x,
+          y: pose.y,
+          yaw: pose.yaw,
+          label: label.trim() || 'Pinpoint Goal',
+        });
+        setState(result.state);
+        setApiConnected(!result.offline);
+        setDraftPin(null);
+        if (result.offline) {
+          showToast(`Navigating to ${result.goal.label} (offline preview)`);
+        } else if (sentAtRef.current) {
+          setLatencyMs(Math.max(1, Math.round(performance.now() - sentAtRef.current)));
+          showToast(`Dispatched Kenny to ${result.goal.label}`);
+        }
+      } finally {
+        setSending(false);
+      }
+    },
+    [showToast]
+  );
 
   const handlePlacePin = useCallback((pose: Pose2D) => {
     setDraftPin(pose);
     setPinLabel('Pinpoint Goal');
   }, []);
 
-  const handlePinpointMe = useCallback(() => {
+  const handleSummonKenny = useCallback(() => {
     if (!state) return;
     const pose: Pose2D = { ...state.userPose };
-    setDraftPin(pose);
-    setPinLabel('Where I Am');
     updateUserPose(pose).catch(() => {});
-  }, [state]);
+    dispatchGoal(pose, 'My Location');
+  }, [state, dispatchGoal]);
 
-  const handleSendGoal = useCallback(async () => {
+  const handleSendDraftGoal = useCallback(() => {
     if (!draftPin) return;
-    setSending(true);
-    sentAtRef.current = performance.now();
-    try {
-      const result = await sendGoal({
-        x: draftPin.x,
-        y: draftPin.y,
-        yaw: draftPin.yaw,
-        label: pinLabel.trim() || 'Pinpoint Goal',
-      });
-      setState(result.state);
-      setApiConnected(!result.offline);
-      if (result.offline) {
-        setLastEchoRoundtripMs(null);
-        showToast({
-          title: 'Saved offline locally',
-          subtitle: `Previewing "${result.goal.label}" (${result.goal.x.toFixed(2)}m, ${result.goal.y.toFixed(2)}m)`,
-          variant: 'info',
-        });
-      } else if (sentAtRef.current) {
-        setLastEchoRoundtripMs(Math.max(1, Math.round(performance.now() - sentAtRef.current)));
-      }
-      if (
-        pinLabel.trim().toLowerCase().includes('where i am') ||
-        pinLabel.trim().toLowerCase().includes('my location')
-      ) {
-        updateUserPose(draftPin).catch(() => {});
-      }
-    } finally {
-      setSending(false);
-    }
-  }, [draftPin, pinLabel, showToast]);
+    dispatchGoal(draftPin, pinLabel);
+  }, [draftPin, pinLabel, dispatchGoal]);
+
+  const handleSendToDock = useCallback(() => {
+    const dock = state?.waypoints.find((w) => w.category === 'dock') ?? {
+      x: 1.5,
+      y: 7.8,
+      yaw: 0,
+      name: 'Base Dock',
+    };
+    dispatchGoal({ x: dock.x, y: dock.y, yaw: dock.yaw }, dock.name);
+  }, [state, dispatchGoal]);
+
+  const handleTargetWaypoint = useCallback(
+    (wp: Waypoint) => {
+      dispatchGoal({ x: wp.x, y: wp.y, yaw: wp.yaw }, wp.name);
+    },
+    [dispatchGoal]
+  );
 
   const handleCancelGoal = useCallback(async () => {
     const res = await cancelGoal();
     setState(res.state);
-    showToast({
-      title: 'Goal canceled',
-      subtitle: res.offline ? 'Stopped offline preview.' : 'Kenny stopped navigation.',
-      variant: 'info',
-    });
+    showToast('Emergency Stop — navigation halted');
   }, [showToast]);
-
-  const handleSelectWaypoint = useCallback((wp: Waypoint) => {
-    setDraftPin({ x: wp.x, y: wp.y, yaw: wp.yaw });
-    setPinLabel(wp.name);
-  }, []);
-
-  const handleSaveWaypoint = useCallback(
-    async (name: string) => {
-      if (!draftPin) return;
-      const res = await createWaypoint({ name, x: draftPin.x, y: draftPin.y, yaw: draftPin.yaw });
-      setState(res.state);
-      showToast({
-        title: res.offline ? 'Waypoint saved offline' : 'Waypoint saved',
-        subtitle: res.offline
-          ? `"${name}" stored locally on this device`
-          : `"${name}" synced to Kenny's map`,
-        variant: 'synced',
-      });
-    },
-    [draftPin, showToast]
-  );
-
-  const handleDeleteWaypoint = useCallback(async (id: string) => {
-    const res = await deleteWaypoint(id);
-    setState(res.state);
-  }, []);
 
   const handleUploadMapFile = useCallback(
     (file: File, widthMeters: number, heightMeters: number) => {
@@ -305,63 +262,98 @@ export function App() {
           imageDataUrl: dataUrl,
         });
         setMap(res.map);
-        showToast({
-          title: res.offline ? 'Custom map saved locally' : 'Custom map synced',
-          subtitle: `${res.map.name} (${widthMeters}m × ${heightMeters}m)`,
-          variant: res.offline ? 'info' : 'synced',
-        });
+        showToast(`Loaded map: ${res.map.name}`);
       };
       reader.readAsDataURL(file);
     },
     [showToast]
   );
 
+  if (showLanding) {
+    return (
+      <LandingScreen
+        tripsCount={tripsCount}
+        onOpenApp={() => {
+          setShowLanding(false);
+          setActiveTab('home');
+          window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+        }}
+      />
+    );
+  }
+
   return (
-    <main className="relative h-[100dvh] w-full overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)]">
-      <TopBar
-        map={map}
-        state={state}
+    <div className="bg-surface text-on-surface flex flex-col min-h-[100dvh] w-full antialiased">
+      <AppHeader
         connected={connected}
-        darkMode={darkMode}
-        onToggleTheme={() => setDarkMode((d) => !d)}
-        onResync={loadInitial}
         syncing={syncing}
+        onResync={loadInitial}
+        onShowLanding={() => {
+          setShowLanding(true);
+          window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+        }}
       />
 
-      <GoalToast notice={toast} />
+      <main className="flex flex-col relative w-full pt-20 pb-28 bg-surface min-h-[100dvh]">
+        {activeTab === 'home' && (
+          <HomeScreen
+            map={map}
+            state={state}
+            draftPin={draftPin}
+            pinLabel={pinLabel}
+            sending={sending}
+            tripsCount={tripsCount}
+            totalDistanceKm={totalDistanceKm}
+            onPlacePin={handlePlacePin}
+            onClearPin={() => setDraftPin(null)}
+            onPinLabelChange={setPinLabel}
+            onSummonKenny={handleSummonKenny}
+            onSendGoal={handleSendDraftGoal}
+            onSendToDock={handleSendToDock}
+            onCancelGoal={handleCancelGoal}
+            onTargetWaypoint={handleTargetWaypoint}
+            onResync={loadInitial}
+          />
+        )}
 
-      <SlamMapCanvas
-        map={map}
-        state={state}
-        draftPin={draftPin}
-        darkMode={darkMode}
-        sheetExpanded={sheetExpanded}
-        hasToast={Boolean(toast)}
-        onPlacePin={handlePlacePin}
-        onCenterOnUser={handlePinpointMe}
-      />
+        {activeTab === 'settings' && (
+          <SettingsScreen
+            connected={connected}
+            state={state}
+            map={map}
+            latencyMs={latencyMs}
+            onApiBaseChanged={() => setStreamVersion((v) => v + 1)}
+            onResync={loadInitial}
+            onUploadMapFile={handleUploadMapFile}
+            onNotify={showToast}
+          />
+        )}
 
-      <BottomControlSheet
-        map={map}
-        state={state}
-        draftPin={draftPin}
-        pinLabel={pinLabel}
-        sending={sending}
-        expanded={sheetExpanded}
-        lastEchoRoundtripMs={lastEchoRoundtripMs}
-        onExpandedChange={setSheetExpanded}
-        onPinLabelChange={setPinLabel}
-        onDraftYawChange={(yaw) => setDraftPin((p) => (p ? { ...p, yaw } : null))}
-        onPinpointMe={handlePinpointMe}
-        onSendGoal={handleSendGoal}
-        onCancelGoal={handleCancelGoal}
-        onSelectWaypoint={handleSelectWaypoint}
-        onSaveWaypoint={handleSaveWaypoint}
-        onDeleteWaypoint={handleDeleteWaypoint}
-        onUploadMapFile={handleUploadMapFile}
-        onApiBaseChanged={() => setStreamVersion((v) => v + 1)}
+        {activeTab === 'about' && <AboutScreen onNotify={showToast} />}
+      </main>
+
+      {/* Kinetic Habitat Pill Toast */}
+      <div
+        role="status"
+        aria-live="polite"
+        className={`fixed bottom-24 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-4 py-2 rounded-full text-[12px] font-bold shadow-xl flex items-center gap-2 z-50 transition-all duration-300 pointer-events-none whitespace-nowrap max-w-[90vw] truncate ${
+          toastMsg ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+        }`}
+      >
+        <span className="material-symbols-outlined text-[16px] text-primary-fixed shrink-0">
+          check_circle
+        </span>
+        <span className="truncate">{toastMsg ?? ''}</span>
+      </div>
+
+      <BottomNav
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
-    </main>
+    </div>
   );
 }
 
