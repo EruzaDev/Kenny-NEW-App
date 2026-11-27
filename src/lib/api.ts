@@ -1,4 +1,16 @@
 import type { KennyState, NavGoal, SavedMap, Waypoint } from '../types';
+import {
+  buildOfflineGoal,
+  createOfflineWaypoint,
+  deleteOfflineWaypoint,
+  loadCachedMap,
+  loadCachedState,
+  saveCachedMap,
+  saveCachedState,
+  updateOfflineUserPose,
+} from './offlineStore';
+
+const REQUEST_TIMEOUT_MS = 3000;
 
 export function getApiBase(): string {
   const custom = localStorage.getItem('kenny_api_base');
@@ -27,10 +39,29 @@ export function getDeviceId(): string {
   return id;
 }
 
-export async function fetchMap(): Promise<SavedMap> {
-  const res = await fetch(`${getApiBase()}/map`);
-  if (!res.ok) throw new Error('Failed to fetch Kenny saved map');
-  return res.json();
+async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('Device is offline');
+  }
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+export async function fetchMap(): Promise<{ map: SavedMap; offline: boolean }> {
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/map`);
+    if (!res.ok) throw new Error('Failed to fetch Kenny saved map');
+    const data = (await res.json()) as SavedMap;
+    saveCachedMap(data);
+    return { map: data, offline: false };
+  } catch {
+    return { map: loadCachedMap(), offline: true };
+  }
 }
 
 export async function uploadCustomMap(payload: {
@@ -39,20 +70,47 @@ export async function uploadCustomMap(payload: {
   widthMeters: number;
   heightMeters: number;
   imageDataUrl: string | null;
-}): Promise<SavedMap> {
-  const res = await fetch(`${getApiBase()}/map`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to sync custom map');
-  return res.json();
+}): Promise<{ map: SavedMap; offline: boolean }> {
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/map`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to sync custom map');
+    const data = (await res.json()) as SavedMap;
+    saveCachedMap(data);
+    return { map: data, offline: false };
+  } catch {
+    const current = loadCachedMap();
+    const localMap: SavedMap = {
+      ...current,
+      id: `offline-map-${Date.now()}`,
+      name: payload.name || 'Custom_Saved_Map.yaml',
+      resolution: payload.resolution || 0.05,
+      widthMeters: payload.widthMeters || current.widthMeters,
+      heightMeters: payload.heightMeters || current.heightMeters,
+      imageDataUrl: payload.imageDataUrl,
+      walls: payload.imageDataUrl ? [] : current.walls,
+      obstacles: payload.imageDataUrl ? [] : current.obstacles,
+      rooms: payload.imageDataUrl ? [] : current.rooms,
+      updatedAt: new Date().toISOString(),
+    };
+    saveCachedMap(localMap);
+    return { map: localMap, offline: true };
+  }
 }
 
-export async function fetchState(): Promise<KennyState> {
-  const res = await fetch(`${getApiBase()}/state`);
-  if (!res.ok) throw new Error('Failed to fetch Kenny state');
-  return res.json();
+export async function fetchState(): Promise<{ state: KennyState; offline: boolean }> {
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/state`);
+    if (!res.ok) throw new Error('Failed to fetch Kenny state');
+    const data = (await res.json()) as KennyState;
+    saveCachedState(data);
+    return { state: data, offline: false };
+  } catch {
+    return { state: loadCachedState(), offline: true };
+  }
 }
 
 export async function sendGoal(payload: {
@@ -60,33 +118,65 @@ export async function sendGoal(payload: {
   y: number;
   yaw: number;
   label: string;
-}): Promise<{ ok: boolean; goal: NavGoal; state: KennyState }> {
-  const res = await fetch(`${getApiBase()}/goal`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+}): Promise<{ ok: boolean; goal: NavGoal; state: KennyState; offline: boolean }> {
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/goal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        deviceId: getDeviceId(),
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to send goal to Kenny API');
+    const data = (await res.json()) as { ok: boolean; goal: NavGoal; state: KennyState };
+    saveCachedState(data.state);
+    return { ...data, offline: false };
+  } catch {
+    const { goal, state } = buildOfflineGoal(loadCachedState(), loadCachedMap(), {
       ...payload,
       deviceId: getDeviceId(),
-    }),
-  });
-  if (!res.ok) throw new Error('Failed to send goal to Kenny API');
-  return res.json();
+    });
+    return { ok: true, goal, state, offline: true };
+  }
 }
 
-export async function cancelGoal(): Promise<{ ok: boolean; state: KennyState }> {
-  const res = await fetch(`${getApiBase()}/goal`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to cancel goal');
-  return res.json();
+export async function cancelGoal(): Promise<{ ok: boolean; state: KennyState; offline: boolean }> {
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/goal`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to cancel goal');
+    const data = (await res.json()) as { ok: boolean; state: KennyState };
+    saveCachedState(data.state);
+    return { ...data, offline: false };
+  } catch {
+    const current = loadCachedState();
+    const nextState: KennyState = {
+      ...current,
+      status: 'canceled',
+      activeGoal: current.activeGoal ? { ...current.activeGoal, status: 'canceled' } : null,
+      plannedPath: [],
+      remainingMeters: 0,
+      lastUpdatedAt: new Date().toISOString(),
+    };
+    saveCachedState(nextState);
+    return { ok: true, state: nextState, offline: true };
+  }
 }
 
 export async function updateUserPose(pose: { x: number; y: number; yaw?: number }) {
-  const res = await fetch(`${getApiBase()}/user-pose`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(pose),
-  });
-  if (!res.ok) throw new Error('Failed to update user location');
-  return res.json();
+  const fullPose = { x: pose.x, y: pose.y, yaw: pose.yaw ?? 0 };
+  updateOfflineUserPose(loadCachedState(), fullPose);
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/user-pose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullPose),
+    });
+    if (!res.ok) throw new Error('Failed to update user location');
+    return res.json();
+  } catch {
+    return fullPose;
+  }
 }
 
 export async function createWaypoint(payload: {
@@ -94,21 +184,37 @@ export async function createWaypoint(payload: {
   x: number;
   y: number;
   yaw: number;
-}): Promise<Waypoint> {
-  const res = await fetch(`${getApiBase()}/waypoints`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to save waypoint');
-  return res.json();
+}): Promise<{ waypoint: Waypoint; state: KennyState; offline: boolean }> {
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/waypoints`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to save waypoint');
+    const wp = (await res.json()) as Waypoint;
+    const current = loadCachedState();
+    const nextState = { ...current, waypoints: [...current.waypoints, wp] };
+    saveCachedState(nextState);
+    return { waypoint: wp, state: nextState, offline: false };
+  } catch {
+    const res = createOfflineWaypoint(loadCachedState(), payload);
+    return { ...res, offline: true };
+  }
 }
 
-export async function deleteWaypoint(id: string): Promise<void> {
-  const res = await fetch(`${getApiBase()}/waypoints/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) throw new Error('Failed to delete waypoint');
+export async function deleteWaypoint(id: string): Promise<{ state: KennyState; offline: boolean }> {
+  try {
+    const res = await fetchWithTimeout(`${getApiBase()}/waypoints/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete waypoint');
+    const nextState = deleteOfflineWaypoint(loadCachedState(), id);
+    return { state: nextState, offline: false };
+  } catch {
+    const nextState = deleteOfflineWaypoint(loadCachedState(), id);
+    return { state: nextState, offline: true };
+  }
 }
 
 export function subscribeEvents(handlers: {
@@ -119,11 +225,25 @@ export function subscribeEvents(handlers: {
   onGoalReached?: (state: KennyState) => void;
   onError?: () => void;
 }): () => void {
-  const es = new EventSource(`${getApiBase()}/events`);
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    handlers.onError?.();
+    return () => {};
+  }
+
+  let es: EventSource | null = null;
+  try {
+    es = new EventSource(`${getApiBase()}/events`);
+  } catch {
+    handlers.onError?.();
+    return () => {};
+  }
 
   es.addEventListener('connected', (e) => {
     try {
-      handlers.onConnected?.(JSON.parse((e as MessageEvent).data));
+      const payload = JSON.parse((e as MessageEvent).data) as { map: SavedMap; state: KennyState };
+      saveCachedMap(payload.map);
+      saveCachedState(payload.state);
+      handlers.onConnected?.(payload);
     } catch {
       // ignore malformed event
     }
@@ -131,7 +251,9 @@ export function subscribeEvents(handlers: {
 
   es.addEventListener('state', (e) => {
     try {
-      handlers.onState?.(JSON.parse((e as MessageEvent).data));
+      const s = JSON.parse((e as MessageEvent).data) as KennyState;
+      saveCachedState(s);
+      handlers.onState?.(s);
     } catch {
       // ignore
     }
@@ -139,7 +261,9 @@ export function subscribeEvents(handlers: {
 
   es.addEventListener('map', (e) => {
     try {
-      handlers.onMap?.(JSON.parse((e as MessageEvent).data));
+      const m = JSON.parse((e as MessageEvent).data) as SavedMap;
+      saveCachedMap(m);
+      handlers.onMap?.(m);
     } catch {
       // ignore
     }
@@ -147,7 +271,9 @@ export function subscribeEvents(handlers: {
 
   es.addEventListener('goal_synced', (e) => {
     try {
-      handlers.onGoalSynced?.(JSON.parse((e as MessageEvent).data));
+      const payload = JSON.parse((e as MessageEvent).data) as { goal: NavGoal; state: KennyState };
+      saveCachedState(payload.state);
+      handlers.onGoalSynced?.(payload);
     } catch {
       // ignore
     }
@@ -155,7 +281,9 @@ export function subscribeEvents(handlers: {
 
   es.addEventListener('goal_reached', (e) => {
     try {
-      handlers.onGoalReached?.(JSON.parse((e as MessageEvent).data));
+      const s = JSON.parse((e as MessageEvent).data) as KennyState;
+      saveCachedState(s);
+      handlers.onGoalReached?.(s);
     } catch {
       // ignore
     }
@@ -165,5 +293,5 @@ export function subscribeEvents(handlers: {
     handlers.onError?.();
   };
 
-  return () => es.close();
+  return () => es?.close();
 }

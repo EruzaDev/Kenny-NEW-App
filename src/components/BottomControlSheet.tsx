@@ -119,7 +119,7 @@ export function BottomControlSheet({
       aria-label="Kenny navigation controls"
       className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full sm:max-w-xl sm:px-4 sm:pb-4"
     >
-      <div className="flex flex-col overflow-hidden rounded-t-[28px] border-x border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/97 shadow-[var(--shadow-tinted)] backdrop-blur-xl sm:rounded-3xl sm:border">
+      <div className="liquid-glass flex flex-col overflow-hidden rounded-t-[30px] border-b-0 sm:rounded-[30px] sm:border-b">
         {/* Mobile Swipe Drag Handle */}
         <button
           type="button"
@@ -131,15 +131,15 @@ export function BottomControlSheet({
           aria-expanded={expanded}
           className="flex h-7 w-full shrink-0 touch-none cursor-grab items-center justify-center active:cursor-grabbing"
         >
-          <span className="h-1.5 w-11 rounded-full bg-[var(--border-strong)]/80" />
+          <span className="h-1.5 w-11 rounded-full bg-emerald-950/25 dark:bg-emerald-100/30" />
         </button>
 
-        {/* Segmented Navigation Tabs (44px+ touch targets) */}
+        {/* Segmented Navigation Tabs (Liquid Glass track + 44px+ touch targets) */}
         <div className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-3 pb-2.5">
           <div
             role="tablist"
             aria-label="Navigation sections"
-            className="flex flex-1 items-center gap-1 rounded-2xl bg-[var(--bg-surface-elevated)] p-1"
+            className="liquid-glass-subtle flex flex-1 items-center gap-1 rounded-2xl p-1"
           >
             {(
               [
@@ -172,7 +172,7 @@ export function BottomControlSheet({
                     <motion.span
                       layoutId="active-sheet-tab"
                       transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-xl bg-emerald-600 shadow-sm dark:bg-emerald-400"
+                      className="liquid-cta absolute inset-0 rounded-xl"
                     />
                   )}
                   <Icon className="relative z-10 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -187,7 +187,7 @@ export function BottomControlSheet({
             onClick={() => onExpandedChange(!expanded)}
             aria-label={expanded ? 'Collapse panel' : 'Expand panel'}
             aria-expanded={expanded}
-            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:border-emerald-500/50 hover:text-[var(--text-primary)] active:opacity-80"
+            className="liquid-glass-subtle flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl text-[var(--text-secondary)] transition-colors hover:border-emerald-500/50 hover:text-[var(--text-primary)] active:opacity-80"
           >
             {expanded ? (
               <ChevronDown className="h-5 w-5" aria-hidden="true" />
@@ -274,7 +274,7 @@ export function BottomControlSheet({
 
                 {/* Draft Pinpoint Coordinate Readout */}
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/70 px-3 py-2">
+                  <div className="liquid-glass-subtle rounded-2xl px-3 py-2">
                     <span className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                       Map X
                     </span>
@@ -282,7 +282,7 @@ export function BottomControlSheet({
                       {draftPin ? `${draftPin.x.toFixed(2)}m` : '--'}
                     </span>
                   </div>
-                  <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/70 px-3 py-2">
+                  <div className="liquid-glass-subtle rounded-2xl px-3 py-2">
                     <span className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                       Map Y
                     </span>
@@ -290,7 +290,7 @@ export function BottomControlSheet({
                       {draftPin ? `${draftPin.y.toFixed(2)}m` : '--'}
                     </span>
                   </div>
-                  <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/70 px-3 py-2">
+                  <div className="liquid-glass-subtle rounded-2xl px-3 py-2">
                     <span className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                       Heading
                     </span>
@@ -372,7 +372,7 @@ export function BottomControlSheet({
                   {state?.waypoints.map((wp) => (
                     <div
                       key={wp.id}
-                      className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/60 p-2 transition-colors hover:border-emerald-500/50"
+                      className="liquid-glass-subtle flex items-center justify-between gap-2 rounded-2xl p-2 transition-colors hover:border-emerald-400/50"
                     >
                       <button
                         type="button"
@@ -502,7 +502,7 @@ export function BottomControlSheet({
                     {state?.syncLog.slice(0, 8).map((entry) => (
                       <div
                         key={entry.id}
-                        className="flex items-start gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/50 px-3 py-2"
+                        className="liquid-glass-subtle flex items-start gap-2.5 rounded-xl px-3 py-2"
                       >
                         <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                           {entry.direction === 'outbound' ? (
@@ -535,14 +535,14 @@ export function BottomControlSheet({
           </AnimatePresence>
         </div>
 
-        {/* Pinned Thumb-Zone Action Footer (always visible on Pinpoint tab, respects bottom safe area) */}
-        <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 pt-2.5 pb-safe sm:px-4 sm:pb-3.5">
+        {/* Pinned Thumb-Zone Action Footer (Liquid Glass CTA + safe area) */}
+        <div className="border-t border-[var(--border-subtle)] bg-white/15 px-3.5 pt-2.5 pb-safe dark:bg-black/15 sm:px-4 sm:pb-3.5">
           {activeTab === 'pinpoint' ? (
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={onPinpointMe}
-                className="flex h-12 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-emerald-500/35 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-500/18 active:opacity-80 dark:text-emerald-300"
+                className="liquid-glass-subtle flex h-12 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-emerald-700 transition-colors hover:border-emerald-400/60 active:opacity-80 dark:text-emerald-200"
               >
                 <LocateFixed className="h-4 w-4" aria-hidden="true" />
                 <span>Where I Am</span>
@@ -552,7 +552,7 @@ export function BottomControlSheet({
                 type="button"
                 disabled={!draftPin || sending}
                 onClick={onSendGoal}
-                className="flex h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 ring-1 ring-inset ring-white/20 transition-colors hover:bg-emerald-500 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
+                className="liquid-cta flex h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl px-4 text-sm font-bold text-white transition-opacity hover:opacity-95 active:opacity-85 disabled:cursor-not-allowed disabled:opacity-45 dark:text-emerald-950"
               >
                 <Send className={`h-4 w-4 ${sending ? 'animate-pulse' : ''}`} aria-hidden="true" />
                 <span>{sending ? 'Syncing...' : 'Set Kenny Goal'}</span>
@@ -565,9 +565,9 @@ export function BottomControlSheet({
                 setActiveTab('pinpoint');
                 onExpandedChange(false);
               }}
-              className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-xs font-semibold text-[var(--text-primary)] transition-colors hover:border-emerald-500/50 active:opacity-80"
+              className="liquid-glass-subtle flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl text-xs font-semibold text-[var(--text-primary)] transition-colors hover:border-emerald-500/50 active:opacity-80"
             >
-              <MapPin className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+              <MapPin className="h-4 w-4 text-emerald-500 dark:text-emerald-300" aria-hidden="true" />
               <span>Back to Map & Pinpoint</span>
             </button>
           )}

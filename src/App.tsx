@@ -14,6 +14,7 @@ import {
   updateUserPose,
   uploadCustomMap,
 } from './lib/api';
+import { loadCachedMap, loadCachedState, saveCachedState } from './lib/offlineStore';
 import type { KennyState, Pose2D, SavedMap, Waypoint } from './types';
 
 export function App() {
@@ -23,9 +24,13 @@ export function App() {
     return true;
   });
 
-  const [map, setMap] = useState<SavedMap | null>(null);
-  const [state, setState] = useState<KennyState | null>(null);
-  const [connected, setConnected] = useState(false);
+  // Immediately hydrate from local cache so the APK works 100% offline on cold launch
+  const [map, setMap] = useState<SavedMap | null>(() => loadCachedMap());
+  const [state, setState] = useState<KennyState | null>(() => loadCachedState());
+  const [networkOnline, setNetworkOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [apiConnected, setApiConnected] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [sending, setSending] = useState(false);
   const [draftPin, setDraftPin] = useState<Pose2D | null>(null);
@@ -38,11 +43,36 @@ export function App() {
   const sentAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
+  const connected = networkOnline && apiConnected;
+
   const showToast = useCallback((notice: Omit<ToastNotice, 'id'>) => {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     setToast({ ...notice, id: `${Date.now()}` });
     toastTimerRef.current = window.setTimeout(() => setToast(null), 3600);
   }, []);
+
+  // Track device network online/offline transitions
+  useEffect(() => {
+    const onOnline = () => {
+      setNetworkOnline(true);
+      setStreamVersion((v) => v + 1);
+    };
+    const onOffline = () => {
+      setNetworkOnline(false);
+      setApiConnected(false);
+      showToast({
+        title: 'Offline mode active',
+        subtitle: 'Running on cached SLAM map locally',
+        variant: 'info',
+      });
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [showToast]);
 
   // Apply Dark / Light mode class to <html>
   useEffect(() => {
@@ -56,20 +86,19 @@ export function App() {
     }
     const metaTheme = document.querySelector('meta[name="theme-color"]');
     if (metaTheme) {
-      metaTheme.setAttribute('content', darkMode ? '#07120E' : '#F2F7F4');
+      metaTheme.setAttribute('content', darkMode ? '#040D0A' : '#E6F4EE');
     }
   }, [darkMode]);
 
-  // Initial load + Live SSE subscription (receives goal echoes & Kenny movement back on this device)
+  // Initial load + Live SSE subscription (gracefully falls back to offline cache)
   const loadInitial = useCallback(async () => {
     setSyncing(true);
     try {
-      const [m, s] = await Promise.all([fetchMap(), fetchState()]);
-      setMap(m);
-      setState(s);
-      setConnected(true);
-    } catch {
-      setConnected(false);
+      const [mapRes, stateRes] = await Promise.all([fetchMap(), fetchState()]);
+      setMap(mapRes.map);
+      setState(stateRes.state);
+      const isOnline = !mapRes.offline && !stateRes.offline;
+      setApiConnected(isOnline);
     } finally {
       setSyncing(false);
     }
@@ -81,11 +110,11 @@ export function App() {
       onConnected: ({ map: m, state: s }) => {
         setMap(m);
         setState(s);
-        setConnected(true);
+        setApiConnected(true);
       },
       onState: (s) => {
         setState(s);
-        setConnected(true);
+        setApiConnected(true);
       },
       onMap: (m) => {
         setMap(m);
@@ -97,6 +126,7 @@ export function App() {
       },
       onGoalSynced: ({ goal, state: s }) => {
         setState(s);
+        setApiConnected(true);
         if (sentAtRef.current) {
           setLastEchoRoundtripMs(Math.max(1, Math.round(performance.now() - sentAtRef.current)));
           sentAtRef.current = null;
@@ -116,7 +146,7 @@ export function App() {
         });
       },
       onError: () => {
-        setConnected(false);
+        setApiConnected(false);
       },
     });
 
@@ -124,6 +154,60 @@ export function App() {
       unsubscribe();
     };
   }, [loadInitial, showToast, streamVersion]);
+
+  // Local offline navigation simulation so goal preview works seamlessly without a server
+  useEffect(() => {
+    if (connected || state?.status !== 'navigating' || !state.activeGoal) return;
+
+    const timer = window.setInterval(() => {
+      setState((prev) => {
+        if (!prev || prev.status !== 'navigating' || !prev.activeGoal) return prev;
+        const target = prev.activeGoal;
+        const dx = target.x - prev.pose.x;
+        const dy = target.y - prev.pose.y;
+        const dist = Math.hypot(dx, dy);
+        const step = 0.22;
+
+        if (dist <= step) {
+          const done: KennyState = {
+            ...prev,
+            status: 'reached',
+            pose: { x: target.x, y: target.y, yaw: target.yaw },
+            activeGoal: { ...target, status: 'reached' },
+            progress: 1,
+            remainingMeters: 0,
+            lastUpdatedAt: new Date().toISOString(),
+          };
+          saveCachedState(done);
+          showToast({
+            title: 'Offline simulation arrived',
+            subtitle: `Previewed arrival at ${target.label}`,
+            variant: 'reached',
+          });
+          return done;
+        }
+
+        const total = target.distanceMeters || dist;
+        const nextPose = {
+          x: Number((prev.pose.x + (dx / dist) * step).toFixed(2)),
+          y: Number((prev.pose.y + (dy / dist) * step).toFixed(2)),
+          yaw: Number(Math.atan2(dy, dx).toFixed(3)),
+        };
+        const remaining = Number(Math.hypot(target.x - nextPose.x, target.y - nextPose.y).toFixed(2));
+        const next: KennyState = {
+          ...prev,
+          pose: nextPose,
+          remainingMeters: remaining,
+          progress: total > 0 ? Number(Math.max(0, Math.min(0.99, 1 - remaining / total)).toFixed(3)) : 0,
+          lastUpdatedAt: new Date().toISOString(),
+        };
+        saveCachedState(next);
+        return next;
+      });
+    }, 120);
+
+    return () => window.clearInterval(timer);
+  }, [connected, state?.status, state?.activeGoal?.id, showToast]);
 
   const handlePlacePin = useCallback((pose: Pose2D) => {
     setDraftPin(pose);
@@ -135,7 +219,6 @@ export function App() {
     const pose: Pose2D = { ...state.userPose };
     setDraftPin(pose);
     setPinLabel('Where I Am');
-    // Also keep API aware of user pose
     updateUserPose(pose).catch(() => {});
   }, [state]);
 
@@ -151,36 +234,36 @@ export function App() {
         label: pinLabel.trim() || 'Pinpoint Goal',
       });
       setState(result.state);
-      if (sentAtRef.current) {
+      setApiConnected(!result.offline);
+      if (result.offline) {
+        setLastEchoRoundtripMs(null);
+        showToast({
+          title: 'Saved offline locally',
+          subtitle: `Previewing "${result.goal.label}" (${result.goal.x.toFixed(2)}m, ${result.goal.y.toFixed(2)}m)`,
+          variant: 'info',
+        });
+      } else if (sentAtRef.current) {
         setLastEchoRoundtripMs(Math.max(1, Math.round(performance.now() - sentAtRef.current)));
       }
-      // Update user location marker when sending "Where I Am"
-      if (pinLabel.trim().toLowerCase().includes('where i am') || pinLabel.trim().toLowerCase().includes('my location')) {
+      if (
+        pinLabel.trim().toLowerCase().includes('where i am') ||
+        pinLabel.trim().toLowerCase().includes('my location')
+      ) {
         updateUserPose(draftPin).catch(() => {});
       }
-    } catch {
-      showToast({
-        title: 'Sync failed',
-        subtitle: 'Could not reach Kenny Sync API. Check connection.',
-        variant: 'info',
-      });
     } finally {
       setSending(false);
     }
   }, [draftPin, pinLabel, showToast]);
 
   const handleCancelGoal = useCallback(async () => {
-    try {
-      const res = await cancelGoal();
-      setState(res.state);
-      showToast({
-        title: 'Goal canceled',
-        subtitle: 'Kenny stopped navigation.',
-        variant: 'info',
-      });
-    } catch {
-      // ignore
-    }
+    const res = await cancelGoal();
+    setState(res.state);
+    showToast({
+      title: 'Goal canceled',
+      subtitle: res.offline ? 'Stopped offline preview.' : 'Kenny stopped navigation.',
+      variant: 'info',
+    });
   }, [showToast]);
 
   const handleSelectWaypoint = useCallback((wp: Waypoint) => {
@@ -191,49 +274,42 @@ export function App() {
   const handleSaveWaypoint = useCallback(
     async (name: string) => {
       if (!draftPin) return;
-      try {
-        await createWaypoint({ name, x: draftPin.x, y: draftPin.y, yaw: draftPin.yaw });
-        showToast({
-          title: 'Waypoint saved',
-          subtitle: `"${name}" synced to Kenny's map`,
-          variant: 'synced',
-        });
-      } catch {
-        // ignore
-      }
+      const res = await createWaypoint({ name, x: draftPin.x, y: draftPin.y, yaw: draftPin.yaw });
+      setState(res.state);
+      showToast({
+        title: res.offline ? 'Waypoint saved offline' : 'Waypoint saved',
+        subtitle: res.offline
+          ? `"${name}" stored locally on this device`
+          : `"${name}" synced to Kenny's map`,
+        variant: 'synced',
+      });
     },
     [draftPin, showToast]
   );
 
   const handleDeleteWaypoint = useCallback(async (id: string) => {
-    try {
-      await deleteWaypoint(id);
-    } catch {
-      // ignore
-    }
+    const res = await deleteWaypoint(id);
+    setState(res.state);
   }, []);
 
   const handleUploadMapFile = useCallback(
     (file: File, widthMeters: number, heightMeters: number) => {
       const reader = new FileReader();
       reader.onload = async () => {
-        try {
-          const dataUrl = typeof reader.result === 'string' ? reader.result : null;
-          const updated = await uploadCustomMap({
-            name: file.name,
-            resolution: 0.05,
-            widthMeters,
-            heightMeters,
-            imageDataUrl: dataUrl,
-          });
-          setMap(updated);
-        } catch {
-          showToast({
-            title: 'Map upload failed',
-            subtitle: 'Could not sync custom saved map to API.',
-            variant: 'info',
-          });
-        }
+        const dataUrl = typeof reader.result === 'string' ? reader.result : null;
+        const res = await uploadCustomMap({
+          name: file.name,
+          resolution: 0.05,
+          widthMeters,
+          heightMeters,
+          imageDataUrl: dataUrl,
+        });
+        setMap(res.map);
+        showToast({
+          title: res.offline ? 'Custom map saved locally' : 'Custom map synced',
+          subtitle: `${res.map.name} (${widthMeters}m × ${heightMeters}m)`,
+          variant: res.offline ? 'info' : 'synced',
+        });
       };
       reader.readAsDataURL(file);
     },
