@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg-canvas: #f2f7f4;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #e8f2ec;
+  --bg-map: #eaf2ed;
+  --border-subtle: #cfe0d6;
+  --border-strong: #9cc4ae;
+  --text-primary: #0a1f16;
+  --text-secondary: #3b594c;
+  --text-muted: #557265;
+  --accent-primary: #059669;
+  --accent-primary-hover: #047857;
+  --accent-soft: rgba(5, 150, 105, 0.12);
+  --shadow-tinted: 0 12px 32px -8px rgba(6, 78, 59, 0.14);
+}
+
+.dark {
+  --bg-canvas: #07120e;
+  --bg-surface: #0d1d17;
+  --bg-surface-elevated: #132921;
+  --bg-map: #091712;
+  --border-subtle: #1c3a2e;
+  --border-strong: #2a5946;
+  --text-primary: #ecfdf5;
+  --text-secondary: #9ec4b3;
+  --text-muted: #79a391;
+  --accent-primary: #10b981;
+  --accent-primary-hover: #34d399;
+  --accent-soft: rgba(16, 185, 129, 0.16);
+  --shadow-tinted: 0 16px 40px -8px rgba(0, 0, 0, 0.55);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-mono-num {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle custom scrollbars for sheet content */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
